@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import fs from 'fs';
+import { Injectable, ConflictException } from '@nestjs/common';
+import fs from 'fs/promises';
 import path from 'path';
 import { performance } from 'perf_hooks';
 
@@ -11,20 +11,45 @@ export class ReportsService {
     fs: 'idle',
   };
 
-  state(scope: string) {
+  getState(scope: string) {
     return this.states[scope];
   }
 
-  accounts() {
-    this.states.accounts = 'starting';
+  schedule(scope: string) {
+    if (this.states[scope] !== 'idle') {
+      throw new ConflictException(
+        `Cannot schedule ${scope} report: current state is ${this.states[scope]}`,
+      );
+    }
+
+    // TODO: schedule a job instead (e.g. via SQS)
+    this.states[scope] = 'starting';
+    switch (scope) {
+      case 'accounts':
+        this.processAccounts();
+        break;
+
+      case 'yearly':
+        this.processYearly();
+        break;
+
+      case 'fs':
+        this.processFs();
+        break;
+
+      default:
+        throw new Error(`Unknown report type: ${scope}`);
+    }
+  }
+
+  async processAccounts() {
     const start = performance.now();
     const tmpDir = 'tmp';
     const outputFile = 'out/accounts.csv';
     const accountBalances: Record<string, number> = {};
-    fs.readdirSync(tmpDir).forEach((file) => {
+    for (let file of await fs.readdir(tmpDir)) {
       if (file.endsWith('.csv')) {
-        const lines = fs
-          .readFileSync(path.join(tmpDir, file), 'utf-8')
+        const lines = (await fs.readFile(path.join(tmpDir, file), 'utf-8'))
           .trim()
           .split('\n');
         for (const line of lines) {
@@ -36,25 +61,23 @@ export class ReportsService {
             parseFloat(String(debit || 0)) - parseFloat(String(credit || 0));
         }
       }
-    });
+    }
     const output = ['Account,Balance'];
     for (const [account, balance] of Object.entries(accountBalances)) {
       output.push(`${account},${balance.toFixed(2)}`);
     }
-    fs.writeFileSync(outputFile, output.join('\n'));
+    await fs.writeFile(outputFile, output.join('\n'));
     this.states.accounts = `finished in ${((performance.now() - start) / 1000).toFixed(2)}`;
   }
 
-  yearly() {
-    this.states.yearly = 'starting';
+  async processYearly() {
     const start = performance.now();
     const tmpDir = 'tmp';
     const outputFile = 'out/yearly.csv';
     const cashByYear: Record<string, number> = {};
-    fs.readdirSync(tmpDir).forEach((file) => {
+    for (let file of await fs.readdir(tmpDir)) {
       if (file.endsWith('.csv') && file !== 'yearly.csv') {
-        const lines = fs
-          .readFileSync(path.join(tmpDir, file), 'utf-8')
+        const lines = (await fs.readFile(path.join(tmpDir, file), 'utf-8'))
           .trim()
           .split('\n');
         for (const line of lines) {
@@ -69,19 +92,18 @@ export class ReportsService {
           }
         }
       }
-    });
+    }
     const output = ['Financial Year,Cash Balance'];
     Object.keys(cashByYear)
       .sort()
       .forEach((year) => {
         output.push(`${year},${cashByYear[year].toFixed(2)}`);
       });
-    fs.writeFileSync(outputFile, output.join('\n'));
+    await fs.writeFile(outputFile, output.join('\n'));
     this.states.yearly = `finished in ${((performance.now() - start) / 1000).toFixed(2)}`;
   }
 
-  fs() {
-    this.states.fs = 'starting';
+  async processFs() {
     const start = performance.now();
     const tmpDir = 'tmp';
     const outputFile = 'out/fs.csv';
@@ -124,10 +146,9 @@ export class ReportsService {
         }
       }
     }
-    fs.readdirSync(tmpDir).forEach((file) => {
+    for (let file of await fs.readdir(tmpDir)) {
       if (file.endsWith('.csv') && file !== 'fs.csv') {
-        const lines = fs
-          .readFileSync(path.join(tmpDir, file), 'utf-8')
+        const lines = (await fs.readFile(path.join(tmpDir, file), 'utf-8'))
           .trim()
           .split('\n');
 
@@ -140,7 +161,7 @@ export class ReportsService {
           }
         }
       }
-    });
+    }
 
     const output: string[] = [];
     output.push('Basic Financial Statement');
@@ -195,7 +216,7 @@ export class ReportsService {
     output.push(
       `Assets = Liabilities + Equity, ${totalAssets.toFixed(2)} = ${(totalLiabilities + totalEquity).toFixed(2)}`,
     );
-    fs.writeFileSync(outputFile, output.join('\n'));
+    await fs.writeFile(outputFile, output.join('\n'));
     this.states.fs = `finished in ${((performance.now() - start) / 1000).toFixed(2)}`;
   }
 }
