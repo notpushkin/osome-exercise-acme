@@ -1,5 +1,5 @@
 import { ConflictException } from '@nestjs/common';
-import { UniqueConstraintError } from 'sequelize';
+import { fn, col, cast, Op, UniqueConstraintError } from 'sequelize';
 
 import {
   Ticket,
@@ -19,8 +19,8 @@ export async function createTicket({
   companyId,
 }: TicketParams): Promise<Ticket> {
   const category = ticketCategoryByType[type];
-  const userRole = assigneeRoleByTicketType[type];
-  const assignee = await findAssigneeByRole(companyId, userRole);
+  const userRoles = assigneeRolesByTicketType[type];
+  const assignee = await findAssigneeByRoles(companyId, userRoles);
 
   try {
     return await Ticket.create({
@@ -47,26 +47,39 @@ const ticketCategoryByType: { [K in TicketType]: TicketCategory } = {
   [TicketType.registrationAddressChange]: TicketCategory.corporate,
 };
 
-const assigneeRoleByTicketType: { [K in TicketType]: UserRole } = {
-  [TicketType.managementReport]: UserRole.accountant,
-  [TicketType.registrationAddressChange]: UserRole.corporateSecretary,
+const assigneeRolesByTicketType: { [K in TicketType]: UserRole[] } = {
+  [TicketType.managementReport]: [UserRole.accountant],
+  [TicketType.registrationAddressChange]: [
+    UserRole.corporateSecretary,
+    UserRole.director,
+  ],
 };
 
-async function findAssigneeByRole(companyId: number, role: UserRole) {
-  const assignees = await User.findAll({
-    where: { companyId, role },
-    order: [['createdAt', 'DESC']],
+const uniqueRoleRequired = [UserRole.corporateSecretary, UserRole.director];
+
+async function findAssigneeByRoles(companyId: number, roles: UserRole[]) {
+  const { count, rows } = await User.findAndCountAll({
+    where: {
+      companyId,
+      role: { [Op.in]: roles },
+    },
+    order: [
+      fn('array_position', cast(roles, 'varchar[]'), col('role')),
+      ['createdAt', 'DESC'],
+    ],
+    limit: 2,
   });
 
-  if (!assignees.length)
+  if (!count)
     throw new ConflictException(
-      `Cannot find user with role ${role} to create a ticket`,
+      `Cannot find user with role required to create a ticket (${roles.join(', ')})`,
     );
 
-  if (role === UserRole.corporateSecretary && assignees.length > 1)
+  const multipleUsersWithSameRole = count > 1 && rows[0].role === rows[1].role;
+  if (multipleUsersWithSameRole && uniqueRoleRequired.includes(rows[0].role))
     throw new ConflictException(
-      `Multiple users with role ${role}. Cannot create a ticket`,
+      `Multiple users with role ${rows[0].role}. Cannot create a ticket`,
     );
 
-  return assignees[0];
+  return rows[0];
 }
