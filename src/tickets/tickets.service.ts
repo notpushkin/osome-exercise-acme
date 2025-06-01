@@ -1,4 +1,5 @@
 import { ConflictException } from '@nestjs/common';
+import { UniqueConstraintError } from 'sequelize';
 
 import {
   Ticket,
@@ -21,13 +22,24 @@ export async function createTicket({
   const userRole = assigneeRoleByTicketType[type];
   const assignee = await findAssigneeByRole(companyId, userRole);
 
-  return await Ticket.create({
-    companyId,
-    assigneeId: assignee.id,
-    category,
-    type,
-    status: TicketStatus.open,
-  });
+  try {
+    return await Ticket.create({
+      companyId,
+      assigneeId: assignee.id,
+      category,
+      type,
+      status: TicketStatus.open,
+    });
+  } catch (error) {
+    if (error instanceof UniqueConstraintError) {
+      // We’ve tripped the uniqueTicketsPerCompany index. (Would be a good idea
+      // to check if it’s some other constraint, e.g. by checking
+      // `error.original.constraint`, but for now we only have this one.)
+      throw new ConflictException('Another ticket of this type exists');
+    }
+
+    throw error;
+  }
 }
 
 const ticketCategoryByType: { [K in TicketType]: TicketCategory } = {

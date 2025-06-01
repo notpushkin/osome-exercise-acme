@@ -49,6 +49,33 @@ describe('TicketsController', () => {
         expect(ticket.status).toBe(TicketStatus.open);
       });
 
+      it('creates multiple managementReport tickets', async () => {
+        const company = await Company.create({ name: 'test' });
+        const user = await User.create({
+          name: 'Test User',
+          role: UserRole.accountant,
+          companyId: company.id,
+        });
+
+        const ticket = await controller.create({
+          companyId: company.id,
+          type: TicketType.managementReport,
+        });
+
+        expect(ticket.category).toBe(TicketCategory.accounting);
+        expect(ticket.assigneeId).toBe(user.id);
+        expect(ticket.status).toBe(TicketStatus.open);
+
+        const ticket2 = await controller.create({
+          companyId: company.id,
+          type: TicketType.managementReport,
+        });
+
+        expect(ticket2.category).toBe(TicketCategory.accounting);
+        expect(ticket2.assigneeId).toBe(user.id);
+        expect(ticket2.status).toBe(TicketStatus.open);
+      });
+
       it('if there are multiple accountants, assign the last one', async () => {
         const company = await Company.create({ name: 'test' });
         await User.create({
@@ -106,6 +133,32 @@ describe('TicketsController', () => {
         expect(ticket.assigneeId).toBe(user.id);
         expect(ticket.status).toBe(TicketStatus.open);
       });
+
+      it('if another open registrationAddressChange ticket exists, throw', async () => {
+        const company = await Company.create({ name: 'test' });
+        const user = await User.create({
+          name: 'Test User',
+          role: UserRole.corporateSecretary,
+          companyId: company.id,
+        });
+
+        await controller.create({
+          companyId: company.id,
+          type: TicketType.registrationAddressChange,
+        });
+
+        await expect(
+          controller.create({
+            companyId: company.id,
+            type: TicketType.registrationAddressChange,
+          }),
+        ).rejects.toEqual(
+          new ConflictException(`Another ticket of this type exists`),
+        );
+      });
+
+      // TODO: test if we can create another ticket after the previous was
+      // closed
 
       it('if there are multiple secretaries, throw', async () => {
         const company = await Company.create({ name: 'test' });
