@@ -6,7 +6,7 @@ module.exports = {
     await queryInterface.sequelize.query(`
       BEGIN;
       DROP INDEX IF EXISTS uniqueTicketsPerCompany;
-      CREATE UNIQUE INDEX uniqueTicketsPerCompany ON "tickets" ("companyId")
+      CREATE UNIQUE INDEX uniqueTicketsPerCompany ON "tickets" ("companyId", "type")
         WHERE (type IN ('registrationAddressChange', 'strikeOff')) AND status = 'open';
       COMMIT;
     `);
