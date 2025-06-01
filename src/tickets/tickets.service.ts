@@ -45,6 +45,7 @@ export async function createTicket({
 const ticketCategoryByType: { [K in TicketType]: TicketCategory } = {
   [TicketType.managementReport]: TicketCategory.accounting,
   [TicketType.registrationAddressChange]: TicketCategory.corporate,
+  [TicketType.strikeOff]: TicketCategory.corporate,
 };
 
 const assigneeRolesByTicketType: { [K in TicketType]: UserRole[] } = {
@@ -53,6 +54,7 @@ const assigneeRolesByTicketType: { [K in TicketType]: UserRole[] } = {
     UserRole.corporateSecretary,
     UserRole.director,
   ],
+  [TicketType.strikeOff]: [UserRole.director],
 };
 
 const uniqueRoleRequired = [UserRole.corporateSecretary, UserRole.director];
