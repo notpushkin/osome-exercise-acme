@@ -2,6 +2,7 @@ import { ConflictException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Company } from '../../db/models/Company';
 import {
+  Ticket,
   TicketCategory,
   TicketStatus,
   TicketType,
@@ -291,6 +292,29 @@ describe('TicketsController', () => {
       expect(ticket.category).toBe(TicketCategory.corporate);
       expect(ticket.assigneeId).toBe(user.id);
       expect(ticket.status).toBe(TicketStatus.open);
+    });
+
+    it('closes off all other tickets', async () => {
+      const company = await Company.create({ name: 'test' });
+      await User.create({
+        name: 'Test Director',
+        role: UserRole.director,
+        companyId: company.id,
+      });
+
+      const addressChangeTicket = await controller.create({
+        companyId: company.id,
+        type: TicketType.registrationAddressChange,
+      });
+
+      await controller.create({
+        companyId: company.id,
+        type: TicketType.strikeOff,
+      });
+
+      expect((await Ticket.findByPk(addressChangeTicket.id))?.status).toBe(
+        TicketStatus.resolved,
+      );
     });
 
     it('if another open strikeOff ticket exists, throw', async () => {

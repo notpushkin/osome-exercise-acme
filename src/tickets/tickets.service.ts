@@ -22,8 +22,9 @@ export async function createTicket({
   const userRoles = assigneeRolesByTicketType[type];
   const assignee = await findAssigneeByRoles(companyId, userRoles);
 
+  let ticket: Ticket;
   try {
-    return await Ticket.create({
+    ticket = await Ticket.create({
       companyId,
       assigneeId: assignee.id,
       category,
@@ -40,6 +41,20 @@ export async function createTicket({
 
     throw error;
   }
+
+  if (type === TicketType.strikeOff) {
+    // TODO: Schedule a job instead?
+    await Ticket.update({
+      status: TicketStatus.resolved,
+    }, {
+      where: {
+        companyId,
+        id: { [Op.ne]: ticket.id },
+      }
+    });
+  }
+
+  return ticket;
 }
 
 const ticketCategoryByType: { [K in TicketType]: TicketCategory } = {
