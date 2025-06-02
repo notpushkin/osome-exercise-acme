@@ -8,18 +8,18 @@ export class ReportsController {
   @Get()
   report() {
     return {
-      'accounts.csv': this.reportsService.state('accounts'),
-      'yearly.csv': this.reportsService.state('yearly'),
-      'fs.csv': this.reportsService.state('fs'),
+      'accounts.csv': this.reportsService.getState('accounts'),
+      'yearly.csv': this.reportsService.getState('yearly'),
+      'fs.csv': this.reportsService.getState('fs'),
     };
   }
 
   @Post()
   @HttpCode(201)
   generate() {
-    this.reportsService.accounts();
-    this.reportsService.yearly();
-    this.reportsService.fs();
-    return { message: 'finished' };
+    this.reportsService.schedule('accounts');
+    this.reportsService.schedule('yearly');
+    this.reportsService.schedule('fs');
+    return { message: 'scheduled' };
   }
 }
